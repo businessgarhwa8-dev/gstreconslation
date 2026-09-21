@@ -574,10 +574,22 @@ export const GstProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         fetchConsolidated3bFromSupabase(currentId, activeFY),
       ]);
 
-      if (pRemote) setPurchases(pRemote);
-      if (sRemote && sRemote.length > 0) setSales(sRemote);
-      if (iRemote && iRemote.length > 0) setItc(iRemote);
-      if (bRemote && bRemote.length > 0) setConsolidated3b(bRemote);
+      if (pRemote !== null) {
+        setPurchases(pRemote);
+        localStorage.setItem(getClientStorageKey(currentId, STORAGE_KEYS.PURCHASES), JSON.stringify(pRemote));
+      }
+      if (sRemote !== null && sRemote.length > 0) {
+        setSales(sRemote);
+        localStorage.setItem(getClientStorageKey(currentId, STORAGE_KEYS.SALES), JSON.stringify(sRemote));
+      }
+      if (iRemote !== null && iRemote.length > 0) {
+        setItc(iRemote);
+        localStorage.setItem(getClientStorageKey(currentId, STORAGE_KEYS.ITC), JSON.stringify(iRemote));
+      }
+      if (bRemote !== null && bRemote.length > 0) {
+        setConsolidated3b(bRemote);
+        localStorage.setItem(getClientStorageKey(currentId, STORAGE_KEYS.CONSOLIDATED_3B), JSON.stringify(bRemote));
+      }
 
       setSupabaseState({
         isConnected: true,
@@ -949,7 +961,10 @@ export const GstProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         id: `p-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
         sr: prev.length + 1,
       };
-      return [...prev, newRec];
+      const updated = [...prev, newRec];
+      localStorage.setItem(getClientStorageKey(activeClientIdRef.current, STORAGE_KEYS.PURCHASES), JSON.stringify(updated));
+      savePurchasesToSupabase(activeClientIdRef.current, settings.financialYear, updated);
+      return updated;
     });
   };
 
@@ -960,7 +975,10 @@ export const GstProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ...r,
         sr: offset + i + 1,
       }));
-      return [...prev, ...renumbered];
+      const updated = [...prev, ...renumbered];
+      localStorage.setItem(getClientStorageKey(activeClientIdRef.current, STORAGE_KEYS.PURCHASES), JSON.stringify(updated));
+      savePurchasesToSupabase(activeClientIdRef.current, settings.financialYear, updated);
+      return updated;
     });
   };
 
@@ -970,22 +988,32 @@ export const GstProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       sr: i + 1,
     }));
     setPurchases(renumbered);
+    localStorage.setItem(getClientStorageKey(activeClientIdRef.current, STORAGE_KEYS.PURCHASES), JSON.stringify(renumbered));
+    savePurchasesToSupabase(activeClientIdRef.current, settings.financialYear, renumbered);
   };
 
   const updatePurchaseRecord = (id: string, updates: Partial<PurchaseRecord>) => {
-    setPurchases((prev) => prev.map((p) => (p.id === id ? { ...p, ...updates } : p)));
+    setPurchases((prev) => {
+      const updated = prev.map((p) => (p.id === id ? { ...p, ...updates } : p));
+      localStorage.setItem(getClientStorageKey(activeClientIdRef.current, STORAGE_KEYS.PURCHASES), JSON.stringify(updated));
+      savePurchasesToSupabase(activeClientIdRef.current, settings.financialYear, updated);
+      return updated;
+    });
   };
 
   const deletePurchaseRecord = (id: string) => {
     setPurchases((prev) => {
       const filtered = prev.filter((p) => p.id !== id);
-      return filtered.map((p, idx) => ({ ...p, sr: idx + 1 }));
+      const renumbered = filtered.map((p, idx) => ({ ...p, sr: idx + 1 }));
+      localStorage.setItem(getClientStorageKey(activeClientIdRef.current, STORAGE_KEYS.PURCHASES), JSON.stringify(renumbered));
+      savePurchasesToSupabase(activeClientIdRef.current, settings.financialYear, renumbered);
+      return renumbered;
     });
   };
 
   const updateSalesRecord = (id: string, updates: Partial<MonthlySalesRecord>) => {
-    setSales((prev) =>
-      prev.map((s) => {
+    setSales((prev) => {
+      const updated = prev.map((s) => {
         if (s.id === id) {
           const merged = { ...s, ...updates };
           merged.totalSales = merged.taxableSales + merged.exemptSales;
@@ -993,8 +1021,11 @@ export const GstProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           return merged;
         }
         return s;
-      })
-    );
+      });
+      localStorage.setItem(getClientStorageKey(activeClientIdRef.current, STORAGE_KEYS.SALES), JSON.stringify(updated));
+      saveSalesToSupabase(activeClientIdRef.current, settings.financialYear, updated);
+      return updated;
+    });
   };
 
   const appendSalesRecords = (records: MonthlySalesRecord[]) => {
@@ -1013,12 +1044,18 @@ export const GstProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           merged[idx] = { ...merged[idx], ...newRecord, id: merged[idx].id, month: merged[idx].month };
         }
       });
-      return normalize12MonthsSales(merged, settings.financialYear);
+      const updated = normalize12MonthsSales(merged, settings.financialYear);
+      localStorage.setItem(getClientStorageKey(activeClientIdRef.current, STORAGE_KEYS.SALES), JSON.stringify(updated));
+      saveSalesToSupabase(activeClientIdRef.current, settings.financialYear, updated);
+      return updated;
     });
   };
 
   const replaceSalesRecords = (records: MonthlySalesRecord[]) => {
-    setSales(normalize12MonthsSales(records, settings.financialYear));
+    const updated = normalize12MonthsSales(records, settings.financialYear);
+    setSales(updated);
+    localStorage.setItem(getClientStorageKey(activeClientIdRef.current, STORAGE_KEYS.SALES), JSON.stringify(updated));
+    saveSalesToSupabase(activeClientIdRef.current, settings.financialYear, updated);
   };
 
   const importCombinedPurchaseAndSales = (
@@ -1083,6 +1120,9 @@ export const GstProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       sales: finalSales,
     });
 
+    savePurchasesToSupabase(effectiveClientId, clientData.settings.financialYear, finalPurchases);
+    saveSalesToSupabase(effectiveClientId, clientData.settings.financialYear, finalSales);
+
     if (isTargetActive) {
       if (newPurchases && newPurchases.length > 0) {
         setPurchases(finalPurchases);
@@ -1096,35 +1136,43 @@ export const GstProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateItcRecord = (id: string, updates: Partial<MonthlyItcRecord>) => {
-    setItc((prev) =>
-      prev.map((item) => {
+    setItc((prev) => {
+      const updated = prev.map((item) => {
         if (item.id === id) {
           const merged = { ...item, ...updates };
           merged.totalTax = (merged.igst || 0) + (merged.cgst || 0) + (merged.sgst || 0) + (merged.cess || 0);
           return merged;
         }
         return item;
-      })
-    );
+      });
+      localStorage.setItem(getClientStorageKey(activeClientIdRef.current, STORAGE_KEYS.ITC), JSON.stringify(updated));
+      saveItcToSupabase(activeClientIdRef.current, settings.financialYear, updated);
+      return updated;
+    });
   };
 
   const updateMonthlyItcRow = (monthIndex: number, updates: Partial<MonthlyItcRecord>) => {
-    setItc((prev) =>
-      prev.map((item, idx) => {
+    setItc((prev) => {
+      const updated = prev.map((item, idx) => {
         if (idx === monthIndex) {
           const merged = { ...item, ...updates };
           merged.totalTax = (merged.igst || 0) + (merged.cgst || 0) + (merged.sgst || 0) + (merged.cess || 0);
           return merged;
         }
         return item;
-      })
-    );
+      });
+      localStorage.setItem(getClientStorageKey(activeClientIdRef.current, STORAGE_KEYS.ITC), JSON.stringify(updated));
+      saveItcToSupabase(activeClientIdRef.current, settings.financialYear, updated);
+      return updated;
+    });
   };
 
   const updateSingleItcBalance = (head: 'IGST' | 'CGST' | 'SGST' | 'CESS', opening: number, closing: number) => {
-    setItcBalances((prev) =>
-      prev.map((b) => (b.head === head ? { ...b, opening, closing } : b))
-    );
+    setItcBalances((prev) => {
+      const updated = prev.map((b) => (b.head === head ? { ...b, opening, closing } : b));
+      localStorage.setItem(getClientStorageKey(activeClientIdRef.current, STORAGE_KEYS.ITC_BALANCES), JSON.stringify(updated));
+      return updated;
+    });
   };
 
   const appendItcRecords = (records: MonthlyItcRecord[]) => {
@@ -1143,22 +1191,32 @@ export const GstProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           merged[idx] = { ...merged[idx], ...newRecord, id: merged[idx].id, month: merged[idx].month };
         }
       });
-      return normalize12MonthsItc(merged, settings.financialYear);
+      const updated = normalize12MonthsItc(merged, settings.financialYear);
+      localStorage.setItem(getClientStorageKey(activeClientIdRef.current, STORAGE_KEYS.ITC), JSON.stringify(updated));
+      saveItcToSupabase(activeClientIdRef.current, settings.financialYear, updated);
+      return updated;
     });
   };
 
   const replaceItcRecords = (records: MonthlyItcRecord[]) => {
-    setItc(normalize12MonthsItc(records, settings.financialYear));
+    const updated = normalize12MonthsItc(records, settings.financialYear);
+    setItc(updated);
+    localStorage.setItem(getClientStorageKey(activeClientIdRef.current, STORAGE_KEYS.ITC), JSON.stringify(updated));
+    saveItcToSupabase(activeClientIdRef.current, settings.financialYear, updated);
   };
 
   const updateItcBalances = (b: ItcHeadBalance[]) => {
     setItcBalances(b);
+    localStorage.setItem(getClientStorageKey(activeClientIdRef.current, STORAGE_KEYS.ITC_BALANCES), JSON.stringify(b));
   };
 
   const updateConsolidated3bRow = (monthIndex: number, updates: Partial<Consolidated3BMonthRow>) => {
-    setConsolidated3b((prev) =>
-      prev.map((row) => (row.monthIndex === monthIndex ? { ...row, ...updates } : row))
-    );
+    setConsolidated3b((prev) => {
+      const updated = prev.map((row) => (row.monthIndex === monthIndex ? { ...row, ...updates } : row));
+      localStorage.setItem(getClientStorageKey(activeClientIdRef.current, STORAGE_KEYS.CONSOLIDATED_3B), JSON.stringify(updated));
+      saveConsolidated3bToSupabase(activeClientIdRef.current, settings.financialYear, updated);
+      return updated;
+    });
   };
 
   const appendConsolidated3bData = (records: Consolidated3BMonthRow[]) => {
@@ -1177,22 +1235,27 @@ export const GstProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           merged[idx] = { ...merged[idx], ...newRow };
         }
       });
-      return normalize12Months3B(merged, settings.financialYear);
+      const updated = normalize12Months3B(merged, settings.financialYear);
+      localStorage.setItem(getClientStorageKey(activeClientIdRef.current, STORAGE_KEYS.CONSOLIDATED_3B), JSON.stringify(updated));
+      saveConsolidated3bToSupabase(activeClientIdRef.current, settings.financialYear, updated);
+      return updated;
     });
   };
 
   const syncSalesFrom3B = () => {
     const derived = deriveSalesFrom3B(consolidated3b, settings.financialYear);
     setSales(derived);
+    localStorage.setItem(getClientStorageKey(activeClientIdRef.current, STORAGE_KEYS.SALES), JSON.stringify(derived));
+    saveSalesToSupabase(activeClientIdRef.current, settings.financialYear, derived);
   };
 
   const replaceConsolidated3bData = (records: Consolidated3BMonthRow[]) => {
     const normalized = normalize12Months3B(records, settings.financialYear);
+    const derivedSales = deriveSalesFrom3B(normalized, settings.financialYear);
     setConsolidated3b(normalized);
-    // Directly derive and synchronize complete sales records from 3B outward supplies
-    setSales(deriveSalesFrom3B(normalized, settings.financialYear));
-    setItc((prev) =>
-      prev.map((i) => {
+    setSales(derivedSales);
+    setItc((prev) => {
+      const updated = prev.map((i) => {
         const found = normalized.find((r) => r.monthIndex === i.monthIndex);
         if (found) {
           return {
@@ -1210,8 +1273,15 @@ export const GstProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           };
         }
         return i;
-      })
-    );
+      });
+      localStorage.setItem(getClientStorageKey(activeClientIdRef.current, STORAGE_KEYS.ITC), JSON.stringify(updated));
+      saveItcToSupabase(activeClientIdRef.current, settings.financialYear, updated);
+      return updated;
+    });
+    localStorage.setItem(getClientStorageKey(activeClientIdRef.current, STORAGE_KEYS.CONSOLIDATED_3B), JSON.stringify(normalized));
+    localStorage.setItem(getClientStorageKey(activeClientIdRef.current, STORAGE_KEYS.SALES), JSON.stringify(derivedSales));
+    saveConsolidated3bToSupabase(activeClientIdRef.current, settings.financialYear, normalized);
+    saveSalesToSupabase(activeClientIdRef.current, settings.financialYear, derivedSales);
   };
 
   const applyExtractedCompanySettings = (info: { companyName?: string; gstin?: string; financialYear?: string }) => {

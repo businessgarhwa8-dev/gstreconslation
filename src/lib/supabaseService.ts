@@ -630,7 +630,15 @@ export async function saveSettingsToSupabase(clientId: string, settings: Company
 // -------------------------------------------------------------
 export async function seedAllDemoDataToSupabase(): Promise<boolean> {
   try {
-    // 1. Upsert all 5 client profiles
+    // 1. First check if database tables are ALREADY initialized and populated
+    const existingClients = await fetchClientsFromSupabase();
+    if (existingClients && existingClients.length > 0) {
+      // Database is ALREADY initialized and contains client records.
+      // Do NOT overwrite existing clients or client datasets with default demo data!
+      return true;
+    }
+
+    // 2. ONLY if clients table is completely empty (first run), populate initial demo clients & datasets
     await upsertClientsToSupabase(DEFAULT_5_CLIENT_PROFILES);
 
     // 2. Client 1: Goswami
