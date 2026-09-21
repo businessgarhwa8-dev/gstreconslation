@@ -1,0 +1,8 @@
+{
+  "name": "Remix GST Reconciliation \u0026 Accounting Portal",
+  "description": "Professional GST Purchase, Sales and ITC Reconciliation Web Application with Master PDF reporting, fixed Excel format imports, common GSTIN matching, and Admin/Staff panels.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
